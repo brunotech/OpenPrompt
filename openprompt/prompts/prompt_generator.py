@@ -45,8 +45,7 @@ class LMBFFTemplateGenerationTemplate(ManualTemplate):
     def wrap_one_example(self,
                          example: InputExample) -> List[Dict]:
         example.meta['labelword'] = self.verbalizer.label_words[example.label][0].strip()
-        wrapped_example = super().wrap_one_example(example)
-        return wrapped_example
+        return super().wrap_one_example(example)
 
 class TemplateGenerator:
     r""" This is the automatic template search implementation for `LM-BFF <https://arxiv.org/pdf/2012.15723.pdf>`_. It uses a generation model to generate multi-part text to fill in the template. By jointly considering all samples in the dataset, it uses beam search decoding method to generate a designated number of templates with the highest probability. The generated template may be uniformly used for all samples in the dataset.
@@ -133,7 +132,12 @@ class TemplateGenerator:
         part_id = 0
         while generated_template[i] != self.tokenizer.additional_special_tokens[part_id] and i < len(generated_template) - 1:
             i += 1
-        assert generated_template[i] == self.tokenizer.additional_special_tokens[part_id], print('invalid generated_template {}, missing token {}'.format(generated_template, self.tokenizer.additional_special_tokens[part_id]))
+        assert (
+            generated_template[i]
+            == self.tokenizer.additional_special_tokens[part_id]
+        ), print(
+            f'invalid generated_template {generated_template}, missing token {self.tokenizer.additional_special_tokens[part_id]}'
+        )
         i += 1
 
         output = []
@@ -205,12 +209,16 @@ class TemplateGenerator:
                 for word_id in ids:
                     output_id = item['output_id']
 
-                    if word_id == self.get_part_token_id(output_id) or word_id == self.tokenizer.eos_token_id:
+                    if word_id in [
+                        self.get_part_token_id(output_id),
+                        self.tokenizer.eos_token_id,
+                    ]:
                         # Finish one part
-                        if self.length_limit is not None and item['last_length'] < self.length_limit[output_id - 1]:
-                            check = False
-                        else:
-                            check = True
+                        check = (
+                            self.length_limit is None
+                            or item['last_length']
+                            >= self.length_limit[output_id - 1]
+                        )
                         output_id += 1
                         last_length = 0
                     else:
@@ -235,7 +243,7 @@ class TemplateGenerator:
                         new_item = {'decoder_input_ids': new_decoder_input_ids, 'll': ll, 'output_id': output_id, 'output': output_text, 'last_length': last_length}
                         new_current_output.append(new_item)
 
-            if len(new_current_output) == 0:
+            if not new_current_output:
                 break
 
             new_current_output.sort(key=lambda x: x['ll'], reverse=True)
@@ -258,8 +266,7 @@ class TemplateGenerator:
         _init_dict = {**convert_cfg_to_dict(config), **kwargs}
         init_dict = {key: _init_dict[key] for key in _init_dict if key in init_args}
         init_dict['config'] = config
-        template_generator = cls(**init_dict)
-        return template_generator
+        return cls(**init_dict)
 
     def release_memory(self):
         self.model = self.model.cpu()
@@ -379,7 +386,7 @@ class VerbalizerGenerator:
         elif isinstance(inner_model, BertForMaskedLM):
             return word
         else:
-            raise RuntimeError("{} is not supported yet".format(type(inner_model))) # TODO add more model
+            raise RuntimeError(f"{type(inner_model)} is not supported yet")
 
     @abstractmethod
     def invalid_label_word(self, word: str):
@@ -397,10 +404,10 @@ class VerbalizerGenerator:
         elif isinstance(inner_model, BertForMaskedLM):
             return False
         else:
-            raise RuntimeError("{} is not supported yet".format(type(inner_model))) # TODO
+            raise RuntimeError(f"{type(inner_model)} is not supported yet")
 
     def _show_verbalizer(self):
-        logger.info("Verbalizer is {}".format(self.label_words))
+        logger.info(f"Verbalizer is {self.label_words}")
 
 
     def _find_verbalizer(self):
@@ -421,8 +428,7 @@ class VerbalizerGenerator:
 
         # Take top-n.
         best_idx = np.argsort(-np.array(group_scores))[:self.candidate_num]
-        best_groups = [groups[i] for i in best_idx]
-        return best_groups
+        return [groups[i] for i in best_idx]
 
     def _get_top_words(self):
         label_words_ids = []
@@ -446,8 +452,7 @@ class VerbalizerGenerator:
         init_args = signature(cls.__init__).args
         _init_dict = {**convert_cfg_to_dict(config), **kwargs}
         init_dict = {key: _init_dict[key] for key in _init_dict if key in init_args}
-        verbalizer_generator = cls(**init_dict)
-        return verbalizer_generator
+        return cls(**init_dict)
 
     def release_memory(self):
         self.model = self.model.cpu()

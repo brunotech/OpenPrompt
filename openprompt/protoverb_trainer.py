@@ -57,7 +57,7 @@ class ProtoVerbClassificationRunner(BaseRunner):
                          valid_dataloader = valid_dataloader,
                          test_dataloader = test_dataloader,
                         )
-        self.loss_function = loss_function if loss_function else self.configure_loss_function()
+        self.loss_function = loss_function or self.configure_loss_function()
         self.id2label = id2label
         self.label_path_sep = config.dataset.label_path_sep
 
@@ -96,14 +96,13 @@ class ProtoVerbClassificationRunner(BaseRunner):
 
     def training_step(self, batch, batch_idx):
         logits = self.model(batch)
-        loss = self.loss_function(logits, batch['label'])
-        return loss
+        return self.loss_function(logits, batch['label'])
 
     def prompt_initialize(self):
         verbalizer_config = self.config[self.config.verbalizer]
         template_config = self.config[self.config.template]
         if not hasattr(self.inner_model.verbalizer, "optimize_to_initialize" ) and \
-            not hasattr(self.inner_model.template, "optimize_to_initialize" ):
+                not hasattr(self.inner_model.template, "optimize_to_initialize" ):
             return None
         if hasattr(verbalizer_config, "init_using_split"):
             using_split = verbalizer_config.init_using_split
@@ -120,8 +119,8 @@ class ProtoVerbClassificationRunner(BaseRunner):
             raise NotImplementedError
 
         with torch.no_grad():
-            for batch in tqdm(dataloader, desc="Init_using_{}".format(using_split)):
-                batch = batch.to("cuda:{}".format(self.config.environment.local_rank)).to_dict()
+            for batch in tqdm(dataloader, desc=f"Init_using_{using_split}"):
+                batch = batch.to(f"cuda:{self.config.environment.local_rank}").to_dict()
                 logits = self.model(batch)
             if hasattr(self.inner_model.verbalizer, "optimize_to_initialize" ):
                 self.inner_model.verbalizer.optimize_to_initialize()
@@ -138,9 +137,8 @@ class ProtoVerbClassificationRunner(BaseRunner):
         self.set_stop_criterion()
         self.configure_optimizers()
 
-        if ckpt:
-            if not self.load_checkpoint(ckpt):
-                logger.warning("Train from scratch instead ...")
+        if ckpt and not self.load_checkpoint(ckpt):
+            logger.warning("Train from scratch instead ...")
         if self.cur_epoch == 0:
             self.on_fit_start()
 
